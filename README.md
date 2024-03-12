@@ -26,7 +26,7 @@ In this section we create the lambda that will process the cloudformation event 
 2. Create a lambda role that has access to bedrock and SNS
 
 ```python
-arn:aws:iam::043174637992:role/service-role/chat-role-z2r9kh6o
+arn:aws:iam::12345678901:role/service-role/chat-role
 ```
 
 3. Create a boto3 lambda layer to be used to invoke bedrock:
@@ -34,7 +34,7 @@ arn:aws:iam::043174637992:role/service-role/chat-role-z2r9kh6o
 ```bash
 s3://lambda-layers-us-west-2-54564546/boto3-bedrock-1-28-57.zip
 
-arn:aws:lambda:us-west-2:043174637992:layer:boto3-layer:1
+arn:aws:lambda:us-west-2:12345678901:layer:boto3-layer:1
 ```
 
 4. Create a lambda function `stackFailureAssistant` in us-west-2. ==NOTE: Update the Lambda Timeout to 3 minutes and memory to 1024==

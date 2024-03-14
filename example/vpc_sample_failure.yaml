@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Sample VPC template that will fail and notify you on next steps for remediation.
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/8
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: sample-failure-demo

@@ -1,5 +1,5 @@
 # CloudFormation template that deploys SNS topic, Lambda Function, EventBridge
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: Troubleshooting Cloudformation Failures with Generative AI
 
 Parameters:
@@ -8,10 +8,15 @@ Parameters:
     Description: Email address of the subscriber
   FunctionName:
     Type: String
-    Default: stackFailureAssistant
+    Default: LambdaStackFailureAssistant
   Runtime:
     Type: String
     Default: python3.10
+  S3BucketLambdaLayer:
+    Type: String
+  S3FileName:
+    Type: String
+    Default: python.zip
 
 Resources:
 # SNS Email Topic
@@ -58,6 +63,16 @@ Resources:
                 Action:
                   - "sns:Publish"
                 Resource: !Ref SNSEmailTopic
+        - PolicyName: LambdaLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
       Tags:
         - Key: project
           Value: troubleshooting-cloudformation-failures
@@ -69,8 +84,8 @@ Resources:
       CompatibleRuntimes:
         - python3.10
       Content:
-        S3Bucket: lambda-layers-us-west-2-54564546
-        S3Key: boto3-bedrock-1-28-57.zip
+        S3Bucket: !Ref S3BucketLambdaLayer
+        S3Key: !Ref S3FileName
       Description: Boto3 lambda layer
       LayerName: boto3-lambda-layer
       LicenseInfo: MIT
@@ -80,9 +95,10 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Ref FunctionName
-      Handler: index.handler
+      Handler: index.lambda_handler
       Role: !GetAtt LambdaRole.Arn
       Runtime: !Ref Runtime
+      Timeout: 300
       Code:
         ZipFile: |
           import os
@@ -92,7 +108,6 @@ Resources:
 
           TOPIC_ARN = os.environ["TOPIC_ARN"]
           REGION = os.environ["REGION"]
-
 
           # Define bedrock
           bedrock = boto3.client(
@@ -106,16 +121,21 @@ Resources:
               )
 
 
-          def create_prompt(reason: str) -> str:
+          def create_prompt(reason: str, stack_name: str) -> str:
               prompt = f"""Dear customer,
 
-              I have analyzed the CloudFormation failure reason provided: {reason}. The root cause appears to be <root_cause>. <explain analysis and reasoning>.
+              The following CloudFormation Template {stack_name} in {REGION} has failed. I have analyzed the template and here is the failure reason provided: {reason}. 
+              
+              The root cause appears to be <root_cause>. 
+              
+              <explain analysis and reasoning>.
               
               To resolve this issue, I would suggest the following next steps:
               
                   <step 1>
                   <step 2>
                   <step 3>
+                  etc....
               
               Please let me know if any of those steps need further clarification or if you have additional questions. I'm happy to provide more details if needed.
               
@@ -167,17 +187,23 @@ Resources:
 
           # Lambda handler
           def lambda_handler(event, context):
+              print("Received event")
               reason = event["detail"]["status-details"]["status-reason"]
-              prompt = create_prompt(reason)
+              arn = event["detail"]["stack-id"]
+              components = arn.split('/')
+              stack_name = components[1]
+              prompt = create_prompt(reason, stack_name)
               response = send_prompt(prompt)
               sns_response = send_text(response)
+              print(sns_response)
               return sns_response
       Layers:
         - !Ref LambdaBoto3Layer
       Environment:
         Variables:
           REGION: !Ref "AWS::Region"
-          TOPIC_ARN: !Ref SNSEmailTopic
+          TOPIC_ARN: !Ref "SNSEmailTopic"
+          STACK_NAME: !Ref "AWS::StackName"
       Tags:
         - Key: project
           Value: troubleshooting-cloudformation-failures
@@ -192,7 +218,9 @@ Resources:
         source:
           - "aws.cloudformation"
         detail-type:
-          - "CloudFormation Stack Status Change"
+          - "CloudFormation Resource Status Change"
+        region:
+          - !Ref "AWS::Region"
         detail:
           status-details:
             status:
@@ -202,4 +230,15 @@ Resources:
       Targets:
         - Arn: !GetAtt LambdaFunction.Arn
           Id: "TargetFunctionV1"
+  
+  EventRuleInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref "LambdaFunction"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+          - "EventBridgeRule"
+          - "Arn"
         

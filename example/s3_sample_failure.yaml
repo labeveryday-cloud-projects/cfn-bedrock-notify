@@ -1,0 +1,10 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Sample template that will fail and notify you on next steps for remediation.
+
+Resources:
+  EncryptedS3Bucket:
+    Type: AWS::S3::Bucket  
+    Properties:
+      BucketName: my-s3-bucket
+      VersioningConfiguration:
+        Status: Enabled

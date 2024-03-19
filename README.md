@@ -2,6 +2,13 @@
 
 # Troubleshooting Cloudformation Failures with Generative AI
 
+This innovative tool leverages the power of AWS EventBridge, Lambda, SNS, and Amazon Bedrock. By seamlessly integrating these services, the tool automatically detects and analyzes CloudFormation stack CREATE, UPDATE, or DELETE failures, identifying the root cause with remarkable accuracy.
+
+Through the use of EventBridge, the tool monitors CloudFormation events in real-time, triggering a Lambda function whenever a failure occurs. This Lambda function then invokes Claude, an AI language model trained on a vast corpus of technical documentation and best practices, to analyze the failure's details and provide insightful recommendations for resolving the issue.
+
+The tool's integration with SNS ensures that users receive timely email notifications, complete with detailed root cause analysis and step-by-step instructions for remediation. This streamlined approach eliminates the need for manual troubleshooting, saving valuable time and resources.
+
+With its advanced AI capabilities and seamless integration of AWS services, this tool empowers developers and DevOps teams to quickly identify and resolve CloudFormation failures, ensuring efficient and reliable infrastructure provisioning. Say goodbye to the frustrations of CloudFormation debugging and embrace a future where AI-powered solutions revolutionize your cloud operations.
 
 ## Create an SNS Topic to send an email
 

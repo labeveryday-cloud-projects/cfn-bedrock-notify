@@ -231,6 +231,7 @@ Resources:
         - Arn: !GetAtt LambdaFunction.Arn
           Id: "TargetFunctionV1"
   
+  # Permission that allows EventBridge to invoke Lambda
   EventRuleInvokeLambda:
     Type: AWS::Lambda::Permission
     Properties:

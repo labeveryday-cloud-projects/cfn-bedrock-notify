@@ -13,14 +13,6 @@ Parameters:
   FunctionName:
     Type: String
     Default: LambdaStackFailureAssistant
-  Runtime:
-    Type: String
-    Default: python3.10
-  S3BucketLambdaLayer:
-    Type: String
-  S3FileName:
-    Type: String
-    Default: python.zip
 
   # Condition to check if SecondEmailAddress is provided
 Conditions:
@@ -93,19 +85,6 @@ Resources:
       Tags:
         - Key: project
           Value: troubleshooting-cloudformation-failures
-
-# Lambda Layer 
-  LambdaBoto3Layer:
-    Type: AWS::Lambda::LayerVersion
-    Properties:
-      CompatibleRuntimes:
-        - python3.10
-      Content:
-        S3Bucket: !Ref S3BucketLambdaLayer
-        S3Key: !Ref S3FileName
-      Description: Boto3 lambda layer
-      LayerName: boto3-lambda-layer
-      LicenseInfo: MIT
   
   # Lambda Function that is invoked by EventBridge
   LambdaFunction:
@@ -114,7 +93,7 @@ Resources:
       FunctionName: !Ref FunctionName
       Handler: index.lambda_handler
       Role: !GetAtt LambdaRole.Arn
-      Runtime: !Ref Runtime
+      Runtime: python3.11
       Timeout: 300
       Code:
         ZipFile: |
@@ -215,7 +194,7 @@ Resources:
               print(sns_response)
               return sns_response
       Layers:
-        - !Ref LambdaBoto3Layer
+        - !Ref BedrockBoto3Layer
       Environment:
         Variables:
           REGION: !Ref "AWS::Region"
@@ -224,6 +203,16 @@ Resources:
       Tags:
         - Key: project
           Value: troubleshooting-cloudformation-failures
+
+# Boto3 Lambda Layer 
+  BedrockBoto3Layer:
+    Type: "AWS::Lambda::LayerVersion"
+    Properties:
+      Content:
+        S3Bucket: aws-ml-blog
+        S3Key: bedrock-1-28-57.zip
+      CompatibleRuntimes:
+        - python3.11
 
 # EventBridge Rule that triggers Lambda Function
   EventBridgeRule:

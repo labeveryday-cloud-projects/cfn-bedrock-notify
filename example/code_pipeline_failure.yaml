@@ -1,0 +1,316 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Sample template that will fail and notify you on next steps for remediation.
+
+Resources:
+# AWS CodeCommit
+  CentralAccountCodeCommitRepo:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: netdevops-central-account
+      Code:
+        BranchName: main
+
+  # S3 Artifact Bucket
+  CentralAccountArtifactBucket:
+    Type: "AWS::S3::Bucket"
+
+  # IAM Service Role (AWS CodeBuild)
+  CentralAccountCodeBuildServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: codebuild-service-role-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+                Resource:
+                  - !Join ["/", [!GetAtt CentralAccountArtifactBucket.Arn, "*"]]
+                  - !GetAtt CentralAccountArtifactBucket.Arn
+
+  # CodeBuild Project
+  CentralAccountCodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: CodeBuildProject-netdevops-central-account
+      ServiceRole: !GetAtt CentralAccountCodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec_unit_test.yaml
+  
+  # IAM Service Role (CodePipeline)
+  CentralAccountCodePipelineServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: codepipeline-service-role-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:Put*"
+                  - "s3:Get*"
+                  - "s3:List*"
+                Resource:
+                  - !Join ["/", [!GetAtt CentralAccountArtifactBucket.Arn, "*"]]
+                  - !GetAtt CentralAccountArtifactBucket.Arn
+              - Effect: Allow
+                Action: "iam:PassRole"
+                Resource: "*"
+                Condition:
+                  StringEqualsIfExists:
+                    "iam:PassedToService": cloudformation.amazonaws.com
+              - Effect: Allow
+                Resource: "*"
+                Action:
+                  - "codecommit:CancelUploadArchive"
+                  - "codecommit:GetBranch"
+                  - "codecommit:GetCommit"
+                  - "codecommit:GetRepository"
+                  - "codecommit:GetUploadArchiveStatus"
+                  - "codecommit:UploadArchive"
+              - Effect: Allow
+                Action:
+                  - "cloudformation:CreateStack"
+                  - "cloudformation:DeleteStack"
+                  - "cloudformation:DescribeStacks"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:CreateChangeSet"
+                  - "cloudformation:DeleteChangeSet"
+                  - "cloudformation:DescribeChangeSet"
+                  - "cloudformation:ExecuteChangeSet"
+                  - "cloudformation:SetStackPolicy"
+                  - "cloudformation:ValidateTemplate"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                  - "codebuild:BatchGetBuildBatches"
+                  - "codebuild:StartBuildBatch"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "states:DescribeExecution"
+                  - "states:DescribeStateMachine"
+                  - "states:StartExecution"
+                Resource: "*"
+
+  # IAM Service Role (AWS CloudFormation)
+  CentralAccountCloudFormationServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/CloudWatchFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+        - "arn:aws:iam::aws:policy/IAMFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonSSMFullAccess"
+        - "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
+        - "arn:aws:iam::aws:policy/VPCLatticeFullAccess"
+        - "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
+      Policies:
+        - PolicyName: cloudformation-anfw-secretsmanager
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - network-firewall:*
+                  - secretsmanager:*
+                Resource: '*'
+
+  # Pipeline
+  CentralAccountCodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: pipeline-netdevops-central-account
+      RoleArn: !GetAtt CentralAccountCodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref CentralAccountArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source-Central-Account
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeCommit
+                Version: 1
+              Configuration:
+                RepositoryName: !GetAtt CentralAccountCodeCommitRepo.Name
+                BranchName: main
+                PollForSourceChanges: false
+                OutputArtifactFormat: CODE_ZIP
+              Namespace: SourceVariables
+              OutputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: UnitTest-CFNGuard
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref CentralAccountCodeBuild
+                EnvironmentVariables: '[{"name":"EXEC_ID","value":"#{codepipeline.PipelineExecutionId}","type":"PLAINTEXT"}]'
+              Namespace: BuildVariables
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              RunOrder: 1
+        - Name: CloudFormation-Deployment
+          Actions:
+            - Name: CreateInfrastructure
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: "central-account-infrastructure"
+                Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
+                TemplatePath: "SourceArtifact::resources.yaml"
+                RoleArn: !GetAtt CentralAccountCloudFormationServiceRole.Arn
+              Namespace: CFNVariables
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: CFNArtifact
+              RunOrder: 1
+      RestartExecutionOnUpdate: false
+
+  # IAM Role (EventBridge)
+  CentralAccountEventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: cwe-pipeline-execution
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: codepipeline:StartPipelineExecution
+                Resource:
+                  !Join [
+                    "",
+                    [
+                      "arn:aws:codepipeline:",
+                      !Ref "AWS::Region",
+                      ":",
+                      !Ref "AWS::AccountId",
+                      ":",
+                      !Ref CentralAccountCodePipeline,
+                    ],
+                  ]
+
+  # EventBridge Rule
+  CentralAccountEventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.codecommit
+        detail-type:
+          - "CodeCommit Repository State Change"
+        resources:
+          - !Join [
+              "",
+              [
+                "arn:aws:codecommit:",
+                !Ref "AWS::Region",
+                ":",
+                !Ref "AWS::AccountId",
+                ":",
+                !GetAtt CentralAccountCodeCommitRepo.Name,
+              ],
+            ]
+        detail:
+          event:
+            - referenceCreated
+            - referenceUpdated
+          referenceType:
+            - branch
+          referenceName:
+            - main
+      Targets:
+        - Arn:
+            !Join [
+              "",
+              [
+                "arn:aws:codepipeline:",
+                !Ref "AWS::Region",
+                ":",
+                !Ref "AWS::AccountId",
+                ":",
+                !Ref CentralAccountCodePipeline,
+              ],
+            ]
+          RoleArn: !GetAtt CentralAccountEventBridgeRole.Arn
+          Id: codepipeline-trigger

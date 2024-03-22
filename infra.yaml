@@ -5,7 +5,11 @@ Description: Troubleshooting Cloudformation Failures with Generative AI
 Parameters:
   EmailAddress:
     Type: String
-    Description: Email address of the subscriber
+    Description: Email addresses of the subscriber
+  SecondEmailAddress:
+    Type: String
+    Default: ''
+    Description: (Optional) Secondary email address for notifications
   FunctionName:
     Type: String
     Default: LambdaStackFailureAssistant
@@ -18,6 +22,10 @@ Parameters:
     Type: String
     Default: python.zip
 
+  # Condition to check if SecondEmailAddress is provided
+Conditions:
+  HasSecondEmailAddress: !Not [!Equals [!Ref SecondEmailAddress, '']]
+
 Resources:
 # SNS Email Topic
   SNSEmailTopic:
@@ -29,6 +37,15 @@ Resources:
       Tags:
         - Key: project
           Value: troubleshooting-cloudformation-failures
+  
+  # Second Email Subscription (if SecondEmailAddress is provided)
+  SecondEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasSecondEmailAddress
+    Properties:
+      TopicArn: !Ref SNSEmailTopic
+      Protocol: email
+      Endpoint: !Ref SecondEmailAddress
 
 # Lambda Role that has invokes Bedrock and SNS permissions
   LambdaRole:

@@ -8,7 +8,7 @@ This CloudFormation template deploys an AWS Lambda function, an Amazon SNS topic
 ## Prerequisites
 Before deploying this CloudFormation template, ensure that you have the following prerequisites set up:
 
-1. [AWS CLI]: The AWS Command Line Interface (CLI) must be installed and configured on your local machine. You can download and install the AWS CLI from the official AWS documentation: [Installing the AWS CLI](https://aws.amazon.com/cli/)
+1. AWS CLI: The AWS Command Line Interface (CLI) must be installed and configured on your local machine. You can download and install the AWS CLI from the official AWS documentation: [Installing the AWS CLI](https://aws.amazon.com/cli/)
 
 2. AWS Credentials: Configure your AWS credentials by running aws configure and providing your AWS Access Key ID, Secret Access Key, and preferred AWS Region. Alternatively, you can use other authentication methods like AWS IAM roles or environment variables. For more information, refer to the [AWS CLI Configuration and Credential File Settings documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 

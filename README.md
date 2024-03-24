@@ -1,214 +1,106 @@
-# CNF Remediation Assistant
+# Troubleshooting CloudFormation Failures with Generative AI
 
-# Troubleshooting Cloudformation Failures with Generative AI
+![architecture](./img/cfn-notify.png)
 
-This innovative tool leverages the power of AWS EventBridge, Lambda, SNS, and Amazon Bedrock. By seamlessly integrating these services, the tool automatically detects and analyzes CloudFormation stack CREATE, UPDATE, or DELETE failures, identifying the root cause with remarkable accuracy.
+## Overview
+This CloudFormation template deploys an AWS Lambda function, an Amazon SNS topic, and an EventBridge rule to help troubleshoot failed CloudFormation stack deployments using Generative AI (Claude from Anthropic). The Lambda function analyzes the failure reason from the CloudFormation event, generates a detailed email response using Claude, and sends the response to the specified email addresses via the SNS topic.
 
-Through the use of EventBridge, the tool monitors CloudFormation events in real-time, triggering a Lambda function whenever a failure occurs. This Lambda function then invokes Claude, an AI language model trained on a vast corpus of technical documentation and best practices, to analyze the failure's details and provide insightful recommendations for resolving the issue.
+## Prerequisites
+Before deploying this CloudFormation template, ensure that you have the following prerequisites set up:
 
-The tool's integration with SNS ensures that users receive timely email notifications, complete with detailed root cause analysis and step-by-step instructions for remediation. This streamlined approach eliminates the need for manual troubleshooting, saving valuable time and resources.
+1. [AWS CLI]: The AWS Command Line Interface (CLI) must be installed and configured on your local machine. You can download and install the AWS CLI from the official AWS documentation: [Installing the AWS CLI](https://aws.amazon.com/cli/)
 
-With its advanced AI capabilities and seamless integration of AWS services, this tool empowers developers and DevOps teams to quickly identify and resolve CloudFormation failures, ensuring efficient and reliable infrastructure provisioning. Say goodbye to the frustrations of CloudFormation debugging and embrace a future where AI-powered solutions revolutionize your cloud operations.
+2. AWS Credentials: Configure your AWS credentials by running aws configure and providing your AWS Access Key ID, Secret Access Key, and preferred AWS Region. Alternatively, you can use other authentication methods like AWS IAM roles or environment variables. For more information, refer to the [AWS CLI Configuration and Credential File Settings documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 
-## Create an SNS Topic to send an email
+3. AWS IAM Permissions: Ensure that you have the necessary permissions to create and manage the required AWS resources (Lambda, SNS, EventBridge, IAM roles, etc.) in your AWS account. You can either have administrative privileges or use an IAM role with the appropriate permissions. See [Policies and permissions in IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html)
 
-In this section we will create an SNS Topic in us-west-2 that will be used by the lambda function to send an email of the CFN root cause analysis. 
+## Purpose
+The primary purpose of this tool is to provide a more comprehensive and user-friendly explanation of CloudFormation stack failures. Instead of receiving a generic error message, users will receive a detailed email analysis from Claude, which includes the root cause, reasoning, and suggested steps to resolve the issue.
 
-[notes](https://docs.aws.amazon.com/sns/latest/dg/sns-email-notifications.html)
+## Value
+By leveraging the power of Generative AI, this tool aims to simplify the troubleshooting process for CloudFormation stack failures. It can save time and effort by providing users with a detailed analysis and actionable steps, ultimately increasing productivity and reducing the time required to resolve issues.
 
-1. Create a standard SNS topic
-2. Create a subscription to that topic with email as the protocol
-3. Enter your email address duanlig@amazon.com
-4. Clear create subscription
-5. Copy the ARN
+## How it Works
+1. An EventBridge rule is created to monitor CloudFormation stack failures in the specified AWS region.
+2. When a CloudFormation stack fails, the EventBridge rule triggers the Lambda function.
+3. The Lambda function extracts the failure reason from the CloudFormation event and generates a prompt for Claude.
+4. Claude analyzes the prompt and generates a detailed email response, including the root cause, reasoning, and suggested steps to resolve the issue.
+5. The Lambda function sends the email response to the specified email addresses via the SNS topic.
+6. Users receive the detailed email analysis from Claude, which helps them understand and troubleshoot the CloudFormation stack failure more effectively.
 
->NOTE: You will receive an email to confirm the subscription
+## Deployment
+To deploy this CloudFormation template, you'll need the AWS CLI installed and configured with appropriate permissions.
 
-## Lambda Function
-
-In this section we create the lambda that will process the cloudformation event and send to bedrock to determine the root cause analysis. ENV - Topic ARN, REGION
-
-1. Ensure that bedrock Claude 3 Sonnet model access is enabled in your region `us-west-2`
-
-2. Create a lambda role that has access to bedrock and SNS
-
-```python
-arn:aws:iam::12345678901:role/service-role/chat-role
-```
-
-3. Create a boto3 lambda layer to be used to invoke bedrock:
+1. Clone or download the repository containing the CloudFormation template and cd into the repo's directory.
 
 ```bash
-s3://lambda-layers-us-west-2-54564546/boto3-bedrock-1-28-57.zip
-
-arn:aws:lambda:us-west-2:12345678901:layer:boto3-layer:1
+git clone https://github.com/labeveryday-cloud-projects/cfn-bedrock-notify.git && cd cfn-bedrock-notify
 ```
 
-4. Create a lambda function `stackFailureAssistant` in us-west-2. ==NOTE: Update the Lambda Timeout to 3 minutes and memory to 1024==
+2. Open a terminal or command prompt and navigate to the directory containing the template.
+3. Run the following AWS CLI command to create the CloudFormation stack:
 
-```python
-import os
-import boto3
-import json
-
-
-TOPIC_ARN = os.environ["TOPIC_ARN"]
-REGION = os.environ["REGION"]
-
-
-# Define bedrock
-bedrock = boto3.client(
-    service_name="bedrock-runtime",
-    region_name=REGION
-)
-
-sns = boto3.client(
-        service_name="sns",
-        region_name=REGION
-    )
-
-
-def create_prompt(reason: str) -> str:
-    prompt = f"""Dear customer,
-
-    I have analyzed the CloudFormation failure reason provided: {reason}. The root cause appears to be <root_cause>. <explain analysis and reasoning>.
-    
-    To resolve this issue, I would suggest the following next steps:
-    
-        <step 1>
-        <step 2>
-        <step 3>
-    
-    Please let me know if any of those steps need further clarification or if you have additional questions. I'm happy to provide more details if needed.
-    
-    Thank you, 
-    
-    Claude
-    """
-    return prompt
-
-
-def send_prompt(prompt: str): 
-    prompt_config = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 4096,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                    "type": "text",
-                    "text": prompt
-                    }
-                ]
-            }
-        ]
-    }
-
-    body = json.dumps(prompt_config)
-
-    modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
-    contentType = "application/json"
-    accept = "application/json"
-    response = bedrock.invoke_model(
-        body=body, modelId=modelId, accept=accept, contentType=contentType
-    )
-    response_body = json.loads(response.get("body").read())
-
-    result = response_body.get("content")[0]["text"]
-    return result
-
-# Create a function that send text to trigger sns
-def send_text(message: str):
-    sns.publish(
-        TopicArn=TOPIC_ARN,
-        Message=message
-    )
-    return "SNS Successfully SENT"
-
-
-# Lambda handler
-def lambda_handler(event, context):
-    reason = event["detail"]["status-details"]["status-reason"]
-    prompt = create_prompt(reason)
-    response = send_prompt(prompt)
-    sns_response = send_text(response)
-    return sns_response
+```
+aws cloudformation create-stack \
+--stack-name <STACK_NAME> \
+--template-body file://<TEMPLATE_FILE_PATH> \
+--parameters \
+ParameterKey=EmailAddress,ParameterValue=<YOUR_EMAIL_ADDRESS> \
+--capabilities CAPABILITY_NAMED_IAM
 ```
 
-5. Create a Lambda function test for the CloudFormation example. :
+Replace `<STACK_NAME>` with a name for your CloudFormation stack, `<TEMPLATE_FILE_PATH>` with the path to the CloudFormation template file, and `<YOUR_EMAIL_ADDRESS>` with the email address where you want to receive the analysis.
 
-```json
-{
-  "version": "0",
-  "source": "aws.cloudformation",
-  "account": "123456789012",
-  "id": "12345678-1234-1234-1234-111122223333",
-  "region": "us-east-1",
-  "detail-type": "CloudFormation Resource Status Change",
-  "time": "2022-04-31T17:00:00Z",
-  "resources": ["arn:aws:cloudformation:us-east-1:123456789012:stack/teststack"],
-  "detail": {
-    "stack-id": "arn:aws:cloudformation:us-west-1:123456789012:stack/teststack",
-    "logical-resource-id": "my-s3-bucket",
-    "physical-resource-id": "arn:aws:s3:us-east-1:123456789012:bucket:my-s3-bucket",
-    "status-details": {
-      "status": "CREATE_FAILED",
-      "status-reason": "Resource handler returned message: "Layers are not in the same region as the function. Layers are expected to be in region us-west-2. (Service: Lambda, Status Code: 400, Request ID: f0e58f60-48d7-4c0b-86db-31ab6a63b8c5)" (RequestToken: b275a4a1-8336-e52e-c73b-2c6e90ced18a, HandlerErrorCode: InvalidRequest)"
-    },
-    "resource-type": "AWS::S3::Bucket"
-  }
-}
+4. Wait for the CloudFormation stack creation to complete.
+
+
+### Deploying Across Multiple Regions (Optional)
+
+If you want to deploy this CloudFormation template across multiple AWS regions, you can create a bash script and leverage some AWS CLI commands to create the stack in each desired region. 
+
+Here's how you can do it:
+
+1. Create a bash script (e.g., `deploy-across-regions.sh`) with the following content:
+
+```bash
+#!/bin/bash
+
+# List of AWS regions where you want to deploy the stack
+regions=("us-east-1" "us-west-1" "eu-west-1")
+
+for region in "${regions[@]}"
+do
+    echo "Deploying stack in $region region..."
+    aws cloudformation create-stack \
+        --stack-name <STACK_NAME> \
+        --template-body file://<TEMPLATE_FILE_PATH> \
+        --parameters \
+            ParameterKey=EmailAddress,ParameterValue=<YOUR_EMAIL_ADDRESS> \
+            ParameterKey=SecondEmailAddress,ParameterValue=<OPTIONAL_SECOND_EMAIL_ADDRESS> \
+        --capabilities CAPABILITY_NAMED_IAM \
+        --region $region
+done
 ```
 
+2. Replace `<STACK_NAME>` with the desired name for your CloudFormation stack.
+3. Replace `<TEMPLATE_FILE_PATH>` with the path to your CloudFormation template file.
+4. Replace `<YOUR_EMAIL_ADDRESS>` with the email address where you want to receive the analysis.
+5. Optionally, replace `<OPTIONAL_SECOND_EMAIL_ADDRESS>` with a secondary email address to receive notifications.
+6. Update the `regions` array with the list of AWS regions where you want to deploy the stack.
+7. Save the script and make it executable with `chmod +x deploy-across-regions.sh`.
+8. Run the script with `./deploy-across-regions.sh`.
 
-## EventBridge Rule
+The script will iterate through the specified regions and create the CloudFormation stack in each region using the provided parameters.
 
-1. Create a EventBridge rule `cfn-failure-rule` in US-West-2 triggers the lambda.
+>Note: Make sure you have the appropriate permissions and AWS CLI configured correctly in each region where you're deploying the stack.
 
-Description: `This rule triggers a lambda to analyzer cloudformation template failures `
+## Conclusion
+This CloudFormation template provides a powerful tool for troubleshooting CloudFormation stack failures using Generative AI. By combining the capabilities of AWS services like Lambda, SNS, and EventBridge with the advanced natural language processing capabilities of Claude, users can receive detailed and actionable insights into the root causes of failures and suggested resolution steps. This tool can significantly enhance the CloudFormation deployment experience, saving time and effort in the troubleshooting process.
 
-2. Use the following pattern
-```json
-{
-  "source": ["aws.cloudformation"],
-  "detail-type": ["CloudFormation Resource Status Change"],
-  "region": ["us-west-2"],
-  "detail": {
-  "status-details": {
-      "status": ["CREATE_FAILED"]
-		}
-	}
-}
-```
+### About me
 
-Test rule:
+My passions lie in Network Engineering, Cloud Computing, Automation, and impacting people's lives. I'm fortunate to weave all these elements together in my role as a Developer Advocate. On GitHub, I share my ongoing learning journey and the projects I'm building. Don't hesitate to reach out for a friendly hello or to ask any questions!
 
-```json
-{
-  "version": "0",
-  "source": "aws.cloudformation",
-  "account": "123456789012",
-  "id": "12345678-1234-1234-1234-111122223333",
-  "region": "us-east-1",
-  "detail-type": "CloudFormation Resource Status Change",
-  "time": "2022-04-31T17:00:00Z",
-  "resources": ["arn:aws:cloudformation:us-east-1:123456789012:stack/teststack"],
-  "detail": {
-    "stack-id": "arn:aws:cloudformation:us-west-1:123456789012:stack/teststack",
-    "logical-resource-id": "my-s3-bucket",
-    "physical-resource-id": "arn:aws:s3:us-east-1:123456789012:bucket:my-s3-bucket",
-    "status-details": {
-      "status": "CREATE_COMPLETE",
-      "status-reason": ""
-    },
-    "resource-type": "AWS::S3::Bucket"
-  }
-}
-```
-
-3. Select the `stackFailureAssistant` target:
-
-## Test
-
-Upload a broken CFN to test. 
+My hangouts:
+- [LinkedIn](https://www.linkedin.com/in/duanlightfoot/)
+- [YouTube](https://www.youtube.com/@LabEveryday)

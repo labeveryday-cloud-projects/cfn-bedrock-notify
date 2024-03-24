@@ -3,7 +3,7 @@
 ![architecture](./img/cfn-notify.png)
 
 ## Overview
-This CloudFormation template deploys an AWS Lambda function, an Amazon SNS topic, and an EventBridge rule to help troubleshoot failed CloudFormation stack deployments using Generative AI (Claude from Anthropic). The Lambda function analyzes the failure reason from the CloudFormation event, generates a detailed email response using Claude, and sends the response to the specified email addresses via the SNS topic.
+This CloudFormation template deploys an AWS Lambda function, an Amazon SNS topic, and an EventBridge rule to help troubleshoot failed CloudFormation stack deployments using Generative AI in Amazon Bedrock with the Anthropic Claude 3 large language models (LLMs). The Lambda function analyzes the failure reason from the CloudFormation event, generates a detailed email response using Claude, and sends the response to the specified email addresses via the SNS topic.
 
 ## Prerequisites
 Before deploying this CloudFormation template, ensure that you have the following prerequisites set up:

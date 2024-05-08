@@ -93,7 +93,7 @@ Resources:
       FunctionName: !Ref FunctionName
       Handler: index.lambda_handler
       Role: !GetAtt LambdaRole.Arn
-      Runtime: python3.11
+      Runtime: python3.12
       Timeout: 300
       Code:
         ZipFile: |
@@ -205,8 +205,6 @@ Resources:
               sns_response = send_text(response)
               print(sns_response)
               return sns_response
-      Layers:
-        - !Ref BedrockBoto3Layer
       Environment:
         Variables:
           REGION: !Ref "AWS::Region"
@@ -218,15 +216,6 @@ Resources:
         - Key: project
           Value: troubleshooting-cloudformation-failures
 
-# Boto3 Lambda Layer 
-  BedrockBoto3Layer:
-    Type: "AWS::Lambda::LayerVersion"
-    Properties:
-      Content:
-        S3Bucket: aws-ml-blog
-        S3Key: bedrock-1-28-57.zip
-      CompatibleRuntimes:
-        - python3.11
 
 # EventBridge Rule that triggers Lambda Function
   EventBridgeRule:
